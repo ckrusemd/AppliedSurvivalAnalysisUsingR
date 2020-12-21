@@ -1,5 +1,5 @@
 --- 
-title: "Bookdown Template"
+title: "Applied Survival Analysis Using R"
 author: "Christian Kruse"
 date: "`r Sys.Date()`"
 site: bookdown::bookdown_site
@@ -13,6 +13,8 @@ description: ""
 ---
 
 # Introduction
+
+Notes and exercise solutions for the book **Applied Survival Analysis Using R** by *Dirk F. Moore*.
 
 ```{r include=FALSE}
 
