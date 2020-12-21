@@ -3,8 +3,551 @@ title: "Chapter 2"
 output: html_document
 ---
 
+# Chapter 2
+
 ```{r include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+knitr::opts_chunk$set(root.dir = "C:/Users/Christian/OneDrive/R/AppliedSurvivalAnalysisUsingR/Chapters")
+library(survival)
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(popEpi)
 ```
 
-# Chapter 2
+## Survival function
+
+![](Chapters/Chapters/images/surv_func.png)
+
+Survival analysis methods depend on the survival distribution, and two key ways of  specifying it are the survival function and the hazard function. The survival function  defines the probability of surviving up to a point t. 
+
+This function takes the value 1 at time 0, decreases (or remains constant) over time,  and of course never drops below 0. As defined here it is right continuous. 
+
+```{r}
+
+
+
+df.survival_function = data.frame(day=seq(365),
+                                  prob=0.99^(seq(365)))
+
+ggplot(df.survival_function,aes(x=day,y=prob)) +
+  geom_line()
+
+```
+
+
+## Hazard function
+
+![](Chapters/images/hazard_func.png)
+
+The survival function is often defined in terms of the hazard function, which  is the instantaneous failure rate. It is the probability that, given that a subject has  survived up to time t, he or she fails in the next small interval of time, divided by  the length of that interval.
+
+## Example: Survexp
+
+```{r}
+
+survexp.us[,,"2004"] %>% head
+
+df.survexp_us.2004 = survexp.us[,,"2004"]
+
+# Males
+df.survexp_us.2004.male = 
+  data.frame(age=as.integer(row.names(df.survexp_us.2004)),
+           haz_male=as.numeric(df.survexp_us.2004[,1]))
+
+ggplot(df.survexp_us.2004.male,aes(x=age,y=haz_male)) +
+  geom_point()
+
+# Females
+df.survexp_us.2004.female = 
+  data.frame(age=as.integer(row.names(df.survexp_us.2004)),
+           haz_female=as.numeric(df.survexp_us.2004[,2]))
+
+ggplot(df.survexp_us.2004.female,aes(x=age,y=haz_female)) +
+  geom_point()
+
+```
+
+## Cumulative survival
+
+Cumulative distribution function
+
+This is the complement of the survival function and, like the survival function, it  is right continuous. In survival analysis, this function is known as the cumulative  risk function
+
+
+![](Chapters/images/cum_survival.png)
+
+## Cumulative Hazard Function
+
+The cumulative hazard function is defined as the area under the hazard function up  to time t, that is, 
+
+![](Chapters/images/cum_hazard_func.png)
+
+## Survival Function to Hazard Function
+
+![](Chapters/images/surv_func_to_hazard_func.png)
+
+It is this relationship that allows us to compute the survival function corresponding  to a hazard function, as in Figs. 2.1 and 2.2. 
+
+## Mean and median survival time
+
+![](Chapters/images/eq_2_3.png)
+
+Mean survival time if s(infinite) = 0, meaning that all fail at some point.
+Also means that the Kaplan-Meier curve where the curve does not reach zero cannot be computed.
+
+Median survival is when S(t) = 1/2. Undefined is never reaching <0.5.
+
+## Distributions
+
+### Parametric distributions (2.4)
+
+### 1. Exponential distribution
+Several survival distributions are available for modeling survival data. The exponential distribution, the simplest survival distribution, has a constant hazard, `h(t) = delta`. 
+
+![](Chapters/images/cum_exp_distribution.png)
+Survival function:
+![](Chapters/images/eq_2_4_2.png)
+
+
+```{r}
+
+hazard=0.002
+
+df.exponential =
+  data.frame(time=seq(365),
+             haz=hazard,
+             survival=exp(-hazard*seq(365)),
+             prob_dens=hazard*exp(-hazard*seq(365)))
+
+# Constant hazard
+ggplot(df.exponential,aes(x=time,y=haz)) +
+  geom_point()
+
+# Survival function
+ggplot(df.exponential,aes(x=time,y=survival)) +
+  geom_point()
+
+# Probability density function
+ggplot(df.exponential,aes(x=time,y=prob_dens)) +
+  geom_point()
+
+# Mean
+1/hazard
+
+# Median
+exp(-hazard*346)
+log(2)/hazard
+
+```
+
+
+### 2. Weibull distribution
+
+The exponential distribution is easy to work with, but the constant hazard  assumption is not often appropriate for describing the lifetimes of humans or  animals. The Weibull distribution, which offers more flexibility in modeling survival  data,
+
+![](Chapters/images/weibull_distribution.png)
+
+Hazard function:
+
+```{r}
+
+alpha = 0.1
+delta = 0.2
+t = seq(365)
+
+# Hazard
+h_t = alpha*delta^alpha*t^(alpha-1)
+
+# Survival
+s_t = exp(-(delta*t)^alpha)
+
+df.weibull = 
+  data.frame(time=seq(365),
+           hazard=h_t,
+           survival=s_t)
+
+ggplot(df.weibull,aes(x=time,y=hazard)) +
+  geom_point()
+
+ggplot(df.weibull,aes(x=time,y=survival)) +
+  geom_point()
+
+## Similarity to exponential when alpha=1
+alpha = 1
+delta = 0.2
+t = seq(365)
+h_t = alpha*delta^alpha*t^(alpha-1)
+s_t = exp(-(delta*t)^alpha)
+
+df.weibull = 
+  data.frame(time=seq(365),
+           hazard=h_t,
+           survival=s_t)
+
+ggplot(df.weibull,aes(x=time,y=hazard)) +
+  geom_point()
+
+ggplot(df.weibull,aes(x=time,y=survival)) +
+  geom_point()
+
+## Gamma > 1, monotone increasing
+alpha = 2
+delta = 0.2
+t = seq(365)
+h_t = alpha*delta^alpha*t^(alpha-1)
+s_t = exp(-(delta*t)^alpha)
+
+df.weibull = 
+  data.frame(time=seq(365),
+           hazard=h_t,
+           survival=s_t)
+
+ggplot(df.weibull,aes(x=time,y=hazard)) +
+  geom_point()
+
+ggplot(df.weibull,aes(x=time,y=survival)) +
+  geom_point()
+
+## Gamma < 1, monotone increasing
+alpha = 0.2
+delta = 0.2
+t = seq(365)
+h_t = alpha*delta^alpha*t^(alpha-1)
+s_t = exp(-(delta*t)^alpha)
+
+df.weibull = 
+  data.frame(time=seq(365),
+           hazard=h_t,
+           survival=s_t)
+
+ggplot(df.weibull,aes(x=time,y=hazard)) +
+  geom_point()
+
+ggplot(df.weibull,aes(x=time,y=survival)) +
+  geom_point()
+
+```
+
+#### Mean and median Weibull
+
+```{r}
+
+# Mean
+gamma(1+1/alpha)/delta
+
+# Median
+log(2)^(1/alpha)/delta
+
+```
+
+#### Weibull functions in R
+
+```{r}
+dweibull(x = c(0.25,0.75),shape=c(0.5,0.5))
+
+# Plotting a Weibull survival curve
+weibSurv <- function(t, shape, scale) pweibull(t, 
+                                               shape=shape,
+                                               scale=scale,
+                                               lower.tail=F)  
+curve(weibSurv(x, 
+               shape=1.5, #alpha
+               scale=1/0.03), # 1/gamma
+      from=0,
+      to=150,
+      ylim=c(0,1), 
+      ylab="Survival probability", 
+      xlab="Time")  
+
+# Plotting Weibull hazard curve (as well)
+weibHaz <- function(x, shape, scale) dweibull(x, shape=shape,  scale=scale)/pweibull(x, shape=shape, scale=scale,  lower.tail=F) 
+
+curve(weibHaz(x,
+              shape=1.5,
+              scale=1/0.03),
+      from=0,
+      to=150,
+      ylab="Hazard", 
+      xlab="Time",
+      col="red",
+      add = T)  
+
+
+
+```
+
+```{r}
+
+set.seed(2511)
+alpha <- 1.5
+gamma <- 0.03
+
+### Compute random weibull variables
+weibull_variables <- rweibull(n = 1000,shape=alpha,scale=1/gamma)
+weibull_variables[c(1:10)]
+### Aggregate on those
+mean(weibull_variables)
+median(weibull_variables)
+
+## Theoretical mean and median
+gamma(1+(1/alpha))/gamma
+(log(2)^(1/alpha))/gamma # natural log
+
+```
+
+### Gamma distribution
+
+It is monotone increasing for beta>1 and  monotone decreasing for beta<1. When beta=1, the gamma distribution reduces to  an exponential distribution.  
+
+The hazard and survival functions cannot be written in closed form.
+
+![](Chapters/images/prob_density.png)
+```{r}
+
+# shape: alpha
+# scale: 1/delta
+
+### Gamma hazard
+gammaHaz <- { function(x, 
+                       shape, 
+                       scale) dgamma(x, 
+                                     shape=shape,  
+                                     scale=scale)/pgamma(x, 
+                                                         shape=shape, 
+                                                         scale=scale, 
+                                                         lower.tail=F) } 
+
+curve(gammaHaz(x, shape=c(alpha), scale=1/gamma), from=0, to=150,  ylab="Hazard", xlab="Time", col="red")  
+curve(gammaHaz(x, shape=c(1), scale=1/gamma), from=0, to=150,  ylab="Hazard", xlab="Time", col="red",add=TRUE)  
+curve(gammaHaz(x, shape=c(0.75), scale=1/gamma), from=0, to=150,  ylab="Hazard", xlab="Time", col="red",add=TRUE)  
+
+```
+
+
+### Integral way of reproducing the survival function
+
+```{r}
+
+# Survival rates at different ages
+
+tm <- c(0, # birth
+          1/365, # first day
+          7/365,  # 7. day
+          28/365, # 4. week
+          1:107) # subsequent year
+
+# Hazard lookup from the survexp
+hazMale <- survexp.us[,"male","2004"] # use 3d matrix to isolate males in 2004
+hazFemale <- survexp.us[,"female","2004"] # use 3d matrix to isolate females in 2004
+
+diff(c(1,3)) # how diff works
+tm[c(1:5)] # the tm vector
+tm.diff <- diff(tm)
+tm.diff # the tm diff vector
+
+# Compute survivals
+survMale <- exp(-cumsum(hazMale*tm.diff)*365.24) # rates are constant at different ages
+survFemale <- exp(-cumsum(hazFemale*tm.diff)*365.24)   # rates are constant at different ages
+
+# Mean survival
+survMale*tm.diff[c(1:10)]
+sum(survMale*tm.diff)
+sum(survFemale*tm.diff)
+
+
+
+```
+
+
+### Maximum Likelihood Estimation
+
+Mathematical framework for computing gamma when you have a series of observations t1, t2, t3 etc
+
+We construct a  likelihood by taking a product of terms from the exponential distribution, one for  each observation.
+f(t1*GAMMA)
+
+We need to find the value of GAMMA that maximizes this function, and that  value is known as the maximum likelihood estimate. Now, this product formula is  difficult to work with, so we use a logarithmic transformation to convert it into a  sum, known as the log-likelihood,  
+
+Person years:
+![](Chapters/images/2_6_person_years.png)
+
+![](Chapters/images/mle_var.png)
+![](Chapters/images/mle_table.png)
+
+Consider for example the six observations in Table 1.1, and suppose that they  are derived from an exponential distribution with unknown parameter GAMMA. 
+There  are three deaths, which gives us d `d = 3`. 
+Also, the total patient time on study is  `V = 7+6+6+5+2+4 = 30`. 
+The log-likelihood function is `l(gamma) = 3 * log(gamma) - 30 * gamma`,  and the maximum likelihood estimate is given by `gammaHat = 3/30 / 0.1`
+
+```{r}
+
+ml_function = function(d,V,gamma)  {
+    return(d*log(gamma)-30*gamma)
+}
+
+gamma_df = data.frame(gamma=seq(0,1,by=0.001),
+           gamma_=ml_function(3,30,seq(0,1,by=0.001)))
+
+ggplot(gamma_df,aes(x=gamma,y=gamma_)) +
+  geom_point() +
+  geom_vline(xintercept = 0.1)
+
+gamma_optimal = 3 / ( 7+6+6+5+2+4)
+gamma
+
+```
+
+##  Exercises
+
+### 2.1 
+
+> # 2.1. Using the “survexp.us” data described in Example 2.2, plot the hazard functions for men and women in 1940 and 2000. Comment on the change in mortality  rates in children.  
+
+```{r}
+# Hazard lookup from the survexp
+hazMale.1940 <- survexp.us[,"male","1940"] # use 3d matrix to isolate males in 2004
+hazMale.2000 <- survexp.us[,"male","2000"] # use 3d matrix to isolate females in 2004
+tm.diff <- diff(tm)
+
+plot(hazMale.1940,type = "l")
+lines(hazMale.2000,type = "b",col="red") # add layer-ish
+
+# Compute survivals
+survMale.1940 <- exp(-cumsum(hazMale.1940*tm.diff)*365.24) # rates are constant at different ages
+survMale.2000 <- exp(-cumsum(hazMale.2000*tm.diff)*365.24)   # rates are constant at different ages
+
+plot(survMale.1940,type = "l")
+lines(survMale.2000,type = "b",col="red") # add layer-ish
+```
+
+### 2.2
+
+> Find the mean age of death separately for men and women for 1940 and 2000.  
+
+```{r}
+sum(survMale.1940*tm.diff)
+sum(survMale.2000*tm.diff)
+```
+
+### 2.3
+
+> The data set “survexp.usr” in the “survival” package is a four dimensional array  of hazards in format similar to the “survexp.us” data set, with race (black or white)  in the added dimension. Plot the hazard functions for black males and white males  for 1940 and 2000.  
+
+```{r}
+
+str(survexp.usr)
+
+# 1940
+
+hazMale.black.1940 <- survexp.usr[,"male","black","1940"]
+hazMale.white.1940 <- survexp.usr[,"male","white","1940"]
+survMale.black.1940 <- exp(-cumsum(hazMale.black.1940*tm.diff)*365.24)
+survMale.white.1940 <- exp(-cumsum(hazMale.white.1940*tm.diff)*365.24)
+
+# 2000
+
+hazMale.black.2000 <- survexp.usr[,"male","black","2000"]
+hazMale.white.2000 <- survexp.usr[,"male","white","2000"]
+survMale.black.2000 <- exp(-cumsum(hazMale.black.2000*tm.diff)*365.24)
+survMale.white.2000 <- exp(-cumsum(hazMale.white.2000*tm.diff)*365.24)
+
+
+plot(hazMale.black.1940,type = "l",col="black")
+lines(hazMale.white.1940,type = "l",col="red") # add layer-ish
+lines(hazMale.black.2000,type = "l",col="green") # add layer-ish
+lines(hazMale.white.2000,type = "l",col="blue") # add layer-ish
+
+
+```
+
+### 2.4
+
+> Consider the survival data in Exercise 1.1. Assuming that these observations  are from an exponential distribution, find GAMMA-hat  and an estimate of var(GAMMAhat)
+
+```{r}
+
+df.ex_1_1 =  data.frame(id=seq(5),
+                        survTime=c(5,5,4,3,1),
+                        event=c(0,0,1,1,1))
+
+d = sum(df.ex_1_1$event==1)
+V = sum(df.ex_1_1$survTime)
+
+# Maximum likelihood
+deltaHat = d/V
+deltaHat
+
+# Variance of the mle
+varDeltaHat = deltaHat^2/d
+varDeltaHat
+
+
+```
+
+### 2.5
+ 
+> Consider a survival distribution with constant hazard DELTA = 0.07 from t=0  until t=5 and then hazard DELTA = 0.14 for t > 5. (This is known as a PIECEWISE CONSTANT HAZARD) Plot this hazard function and the corresponding survival function  for 0 < t < 10. What is the median survival time?  
+
+```{r}
+# 2.5. 
+
+df.2_5 = 
+  bind_rows(
+data.frame(t=seq(0,4.9,by=0.1),
+           H=seq(0,4.9,by=0.1)*0.07),
+data.frame(t=seq(5,10,by=0.1),
+           H=seq(5,10,by=0.1)*0.14)
+) %>% 
+  dplyr::mutate(S=exp(-H*t))
+
+# Hazard
+ggplot(df.2_5,aes(x=t,y=H)) + 
+  geom_line()
+
+# Survival
+ggplot(df.2_5,aes(x=t,y=S)) + 
+  geom_line()
+
+# Median
+
+
+
+```
+
+### 2.6
+
+> Another parametric survival distribution is the log-normal distribution. Use the  density and cumulative distribution R functions “dlnorm” and “plnorm” to compute  and plot the lognormal hazard functions with the parameter “meanlog” taking the  values 0, 1, and 2, and with “sdlog” fixed at 0.25. Describe the risk profile a disease 
+
+```{r}
+
+plot(
+dlnorm(x = seq(0,100),
+       meanlog = c(0),
+       sdlog = 0.25)
+)
+
+
+plot(
+dlnorm(x = seq(0,100),
+       meanlog = c(1),
+       sdlog = 0.25)
+)
+
+plot(
+dlnorm(x = seq(0,100),
+       meanlog = c(2),
+       sdlog = 0.25)
+)
+
+
+
+```
+
+
+
+
+
+
+
+

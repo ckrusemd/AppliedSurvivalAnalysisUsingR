@@ -8,3 +8,153 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Chapter 5
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(survival)
+```
+
+## Regression Analysis Using the Proportional  Hazards Model 
+
+Yielding `the proportional hazards`
+
+![](Chapters/images/prop_hazard_relationship.png)
+
+With covariate information in vector z.
+
+![](Chapters/images/prop_hazard_covars.png)
+
+* This  proportional hazards model will allow us to fit regression models to censored  survival data, much as one can do in linear and logistic regression.
+* However,  not assuming a particular parametric form for h0.t/, along with the presence  of censoring, makes survival modeling particularly complicated.
+* In this chapter  we shall see how to do this using what we shall call a `partial likelihood`.
+* This  modification of the standard likelihood was developed initially by D.R. Cox [12],  and hence is often referred to as the **Cox proportional hazards model**. 
+
+* The partial  likelihood will allow us to use an unspecified baseline survival distribution to define  the survival distributions of subjects based on their covariates. 
+* The partial likelihood  differs from a likelihood in two ways. 
+* **First**, it is a product of expressions, one for  each failure time, while censoring times do not contribute any factors. 
+* **Second**, the  factors of a partial likelihood are conditional probabilities.  
+
+`j`: The j'th failure time sorted from lowest to highest
+=> Hazard function for subject i at failure time t_j: 
+
+![](Chapters/images/cox_hazard_function.png)
+
+**Example**
+
+* At first failure time `t1`, the subjects at risk of failure are called `R1`
+* The probability at this time of a specific patient failing is the **hazard divided by the sum of hazards for all subjects**
+
+![](Chapters/images/prop_survival_cox.png)
+
+* Compare treatment (Psi < 1 if treatment improves over control) to control (Psi_i = 1).
+
+* A key fact here is that the baseline hazard h0(t1) cancels out of the  numerator and denominator of the formula
+
+![](Chapters/images/testing_sample.png)
+
+* There are a total of **25 survival times**. At **survival time 6**:
+* 6 patients in dataset (R1)  => 6 psi values. W1, W2 and W4 are 1 (control), while W3, W5, W6 are equal to `psi`
+* This means that at time 6, `pi = 1/(3*psi + 3)
+
+* The **maximum partial likelihood estimate** is the value of that maximizes this function which, as we have said, is independent of the baseline hazard function  
+
+
+```{r}
+plsimple <- function(beta) {  
+  psi <- exp(beta)
+  result <- log(psi) - log(3*psi + 3) -  log(3*psi + 1) - log(2*psi + 1)  
+  result
+} 
+
+plsimple(3)
+
+result <- optim(par=0, fn = plsimple, method = "L-BFGS-B", control=list(fnscale = -1),lower = -3, upper = 1) 
+
+result$par # psi
+```
+
+
+## 5.3 Partial Likelihood Hypothesis Tests 
+
+In standard likelihood theory, one can derive three forms of the test of H0: beta = 0
+* The Wald test
+* The score test
+* The likelihood ratio test
+In survival analysis, we may use the partial likelihood to derive these three tests, although the underlying  statistical theory for the partial likelihood is far more complex than that for standard  likelihood theory
+
+
+```{r}
+
+data(pharmacoSmoking)
+attach(pharmacoSmoking) 
+
+result.cox <- coxph(Surv(pharmacoSmoking$tt, pharmacoSmoking$relapse) ~ pharmacoSmoking$grp)
+# Show the Wald, the score and the likelihood ratio tests
+summary(result.cox)
+
+# calculate by hand (in the case of the survival table of 6 patients, not the pharmacosmoking)
+
+library(numDeriv)
+
+grad(func=plsimple, x=0)
+hessian(func=plsimple, x=0)
+
+(-grad(func=plsimple, x=0)^2)/hessian(func=plsimple, x=0)
+
+```
+
+## 5.4 The Partial Likelihood with Multiple Covariates  
+
+We define **the hazard ratio** (relative to the `baseline hazard`) for subject i:
+
+![](Chapters/images/hazard_ratio.png)
+
+This function is called a partial likelihood because it lacks factors for the censored  observations.
+
+## 5.5  Baseline hazard
+
+![](Chapters/images/baseline_hazard.png)
+
+## 5.6 Handling tied survival times
+
+```{r}
+
+# TODO not done because not relevant
+```
+
+## 5.7 Left truncation
+
+```{r}
+tt <- c(6, 7, 10, 15, 19, 25) 
+status <- c(1, 0, 1, 1, 0, 1)  
+grp <- c(0, 0, 1, 0, 1, 1)  
+backTime <- c(-3, -11, -3, -7, -10, -5)  
+
+# No difference - does not take backtime into consideration
+coxph(Surv(tt, status) ~ grp) 
+
+# With backtime included
+tm.enter <- -backTime 
+tm.exit <- tt - backTime  
+
+coxph(Surv(tm.enter, tm.exit, status, type="counting") ~ grp) 
+
+
+
+```
+
+
+## Exercises
+
+```{r}
+
+# Exercises  5.1. Consider the data set “aml”, which is included in the “survival” package. This  is a study of whether or not maintenance therapy increases survival among patients  with acute myelogenous leukemia, with survival time measured in weeks. The basic  Cox model may be fitted as follows:  result <- coxph(Surv(time, status) ~ x, data=aml) 
+# Create a coarser time variable by expressing it in months instead of weeks as  follows:  time.months <- cut(aml$time, breaks=seq(0,161,4), labels=F)  Now re-fit the model, modeling ties using the Breslow, Efron, and exact methods.  Which approximate method gives a result closest to that from the exact method?  
+
+# 5.2. Consider again the synthetic data in Table 4.1, discussed in Example 5.1  in Sect. 5.2. Use the “basehaz” function to obtain an estimate of the baseline  cumulative hazard function. Use this to compute the predicted survival curves for  the control and experimental groups based on the proportional hazards model we  fitted in Sect. 5.2. 
+
+
+
+
+```
+

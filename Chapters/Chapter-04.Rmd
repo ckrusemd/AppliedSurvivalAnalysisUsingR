@@ -3,8 +3,151 @@ title: "Chapter 4"
 output: html_document
 ---
 
+# Chapter 4
+
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+
+library(survival)
+library(lubridate)
+library(dplyr)
 ```
 
-# Chapter 4
+## Nonparametric Comparison of Survival  Distributions 
+
+### Hypothesis test:
+
+![](Chapters/images/null_hyp.png)
+
+### Lehman:
+
+![](Chapters/images/lehman.png)
+
+Interestingly, the log-rank statistic is identical to a classical test statistic from  epidemiology, the Cochran-Mantel-Haenzel test [2]. 
+This is a test for independence  of two factors (here, treatment and outcome) adjusted for a potential confounder,  and is expressed as series of two-by-two tables with a time-stratified confounding  factor. 
+
+The log-rank test may also be derived from the proportional hazards model,  as we will see in the next chapter. 
+
+While these rank-based tests are similar to the Mann-Whitney test, the presence of  censoring complicates the assignment of ranks.
+
+That is, for each failure time `ti` we may construct a two-by-two table showing the numbers at risk (`n0i` and `n1i` forthe control and treatment arms, respectively) and the number of failures (`d0i` and  `d1i`, respectively).
+
+Then for the `i’th` failure time, we have the following table: 
+
+![](Chapters/images/survival_testing.png)
+
+`hypergeometric distribution`
+
+This probability mass function allows one to compute  the probability of each possible table with the margins fixed.
+
+We may sum up over all the tables the differences between the observed and  expected values to get a linear test statistic `U0`, and also the sum of the variances `V0` as follows,
+
+This test is known as the *log-rank test*. We illustrate it’s calculation in the following  example. 
+
+## Example of testing
+
+* 6 subjects, 3 in treatment and 3 in control.
+
+* 4 survtimes => 4 times a 2x2 table
+
+![](Chapters/images/testing_sample.png)
+
+![](Chapters/images/2x2_tables_surv_test.png)
+
+* sum(d0i) = 2
+* sum(e01) = 1.083
+* => U0 = 2 - 1.083 = 0.917
+* => V0 (sum v0i) = 0.6579
+* ==> log-rank stat (X2): U0 ^ 2 / V0 = 0.917 ^2 / 0.6579 = 1.27
+* => Chi-square with 1 df
+
+```{r}
+tt <- c(6, 7, 10, 15, 19, 25) 
+delta <- c(1, 0, 1, 1, 0, 1)
+trt <- c(0, 0, 1, 0, 1, 1)
+survdiff(Surv(tt, delta) ~ trt)  
+
+
+```
+
+
+
+```{r}
+data(pancreatic)
+
+pancreatic
+
+pancreatic$onstudy <- mdy(as.character(pancreatic$onstudy))
+pancreatic$progression <- mdy(as.character(pancreatic$progression))
+pancreatic$death <- mdy(as.character(pancreatic$death))
+
+pancreatic$time.progressionFreeSurvival = as.numeric(difftime(pancreatic$progression,pancreatic$onstudy))
+
+pancreatic$status = ifelse(is.na(pancreatic$progression),0,1)
+
+# survdiff(Surv(pancreatic$time.progressionFreeSurvival,pancreatic$stage)~pancreatic$status)
+survdiff(Surv(pancreatic$time.progressionFreeSurvival)~pancreatic$stage)
+
+plot(survfit(Surv(pancreatic$time.progressionFreeSurvival)~pancreatic$stage),col=c ("blue ", " red"),lwd=2)
+legend("topright",
+       legend=c ("Locally advanced ", " Metastatic"),
+       col=c ("blue "," red"),lwd=2) 
+
+# already computed pancreatic2
+data(pancreatic2)
+
+```
+
+## Stratified testing
+
+```{r}
+
+# pharmacoSmoking: time to relapse depending on age, factor, treatment etc
+
+data(pharmacoSmoking) # attach includes the ttr variables etc
+knitr::kable(pharmacoSmoking %>% head)
+
+# combination or path only:
+table(pharmacoSmoking$grp)
+
+surv_ <- Surv(pharmacoSmoking$ttr,pharmacoSmoking$relapse)
+str(surv_)
+survdiff_ <- survdiff(surv_ ~ pharmacoSmoking$grp)
+survfit_ <- survfit(surv_ ~ pharmacoSmoking$grp)
+
+survdiff_
+# Combination is best - significant difference
+plot(survfit_,conf.int = F,col = c("blue","red")) 
+
+# By age group as well
+table(pharmacoSmoking$ageGroup2)
+surv_ <- Surv(pharmacoSmoking$ttr,pharmacoSmoking$relapse)
+survdiff_ <- survdiff(surv_ ~ pharmacoSmoking$grp + pharmacoSmoking$ageGroup2)
+survfit_ <- survfit(surv_ ~ pharmacoSmoking$grp+ pharmacoSmoking$ageGroup2)
+plot(survfit_,conf.int = F,col = c("blue","green","red","black")) 
+survdiff_
+survfit_
+
+# Worst: patch only, young people - median 14
+# Best: combo 50+ - median never reached, lower cl 75
+
+```
+
+## Exercises 
+```{r}
+# 4.1. Using the pharmacoSmoking data, compare the two treatments using the  Prentice modification of the Gehan test, and compare your results to those from  the log-rank test.  
+
+# 4.2. Again using the pharmacoSmoking data, carry out a log-rank test comparing  the two treatments stratifying on employment status.  
+
+# 4.3. Using the “pancreatic” data set, which has no censored observations, compare  the two groups using a Wilcoxon rank-sum test, using the “wilcox.test” function  in base R. Compare your results to those from the log-rank and Prentice-modified  Gehan tests.  
+
+# 4.4. Again using the “pancreatic” data set, compare the two groups using overall  survival as the outcome, using both the log-rank test and the Prentice modification  of the Gehan test. Do these two tests yield different results? 
+
+```
+
+
+
+
+
+

@@ -8,3 +8,261 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Chapter 3
+
+## Non-Parametric Survival Curve Estimation
+
+The most widely used of these is the productlimit estimator, also known as the Kaplan-Meier estimator. 
+
+This estimator, first  proposed by Kaplan and Meier [35], is the product over the failure times of the  conditional probabilities of surviving to the next failure time.
+
+![](Chapters/images/kaplan_meier.png)
+
+* n_i : Subjects at risk over time
+* t_i : Time
+* d_i : Number of individuals who fail at that time
+
+* q_i: Failure probability
+* q_i - 1: Conditional SURVIVAL probability
+* Si: Cumulative product
+
+![](Chapters/images/mle_table.png)
+
+Please note that there is a difference between being dead and simply censored
+
+- At time 2: 6 out of 7 - 1 failing
+- At time 4: 5 out of 7 - 1 failing
+- At time 6: 3 out of 7 - 1 failing
+
+Note that Kaplan Meier is a step function unlike the parametric which is exponential/Weibull/gamma
+![](Chapters/images/kaplan_meier_table.png)
+
+```{r}
+
+library(survival)
+
+# Translating the table to a Kaplan Meier estimate
+tt <- c(7,6,6,5,2,4)
+cens <- c(0,1,0,0,1,1)
+
+Surv(tt, cens)  
+
+result.km <- survfit(Surv(tt, cens) ~ 1, 
+                     conf.type="log-log")
+result.km
+summary(result.km)
+plot(result.km)
+
+```
+Alternative, the `Nelson-Altschuler estimator` based on relationship between survival and hazard functions.
+
+![](Chapters/images/nelson_altschuler.png)
+
+```{r}
+
+result.fh <- survfit(Surv(tt, cens) ~ 1, 
+                     conf.type="log-log",
+                     type="fh")
+result.fh
+summary(result.km)
+plot(result.km)
+
+```
+
+## GastricXelox dat
+
+```{r}
+
+# Progression free survival in gastric cancer
+data(gastricXelox)
+timeMonths <- gastricXelox$timeWeeks*7/30.25
+delta <- gastricXelox$delta
+fit.surv <- survfit(Surv(timeMonths,delta) ~ 1, conf.type="log-log")
+summary(fit.surv)
+plot(fit.surv)
+```
+
+### Median Follow Up Time
+
+Switches the event and censored to estimate how long the follow up is on a median - i.e. the quality of the trial
+
+```{r}
+
+delta.followup <- 1 - delta
+fit.surv.delta <- survfit(Surv(timeMonths,delta.followup) ~ 1, conf.type="log-log")
+fit.surv.delta
+summary(fit.surv.delta)
+
+plot(fit.surv.delta)
+
+```
+
+### Kernel smoothing
+
+`Epanechnikov kernel`
+
+```{r}
+library(muhaz)
+t.vec <- c(7,6,6,5,2,4)
+cens.vec <- c(0,1,0,0,1,1)
+result.simple <- muhaz(t.vec,  # failure time
+                       cens.vec, # censoring indicators
+                       max.time=8,  # maximum time
+                       bw.grid=2.25, # smoothing parameter
+                       bw.method="global", # constant smoothing all time
+                       b.cor="none" # no boundary connection
+                       )
+plot(result.simple)  
+
+```
+
+### Example from the gastricXelox data
+```{r}
+
+# Showing 5 months, 1 month and then Smoothed data
+
+result.pe5 <- pehaz(timeMonths, 
+                    delta, 
+                    width=5, # width of 5 months
+                    max.time=20)
+result.pe1 <- pehaz(timeMonths, 
+                    delta, 
+                    width=1, 
+                    max.time=20)  
+result.smooth <- muhaz(timeMonths, 
+                       delta, 
+                       bw.smooth=20,  # Smoothing parameter of 20
+                       b.cor="left", 
+                       max.time=20)  
+
+# Plot the three on top of each other
+
+plot(result.pe5, 
+     ylim=c(0,0.15), 
+     col="black")  
+lines(result.pe1) 
+lines(result.smooth) 
+
+# Convert to survival functions
+haz <- result.smooth$haz.est
+times <- result.smooth$est.grid 
+surv <- exp(-cumsum(haz[1:(length(haz)-1)]*diff(times)))  
+
+# Plot with smoothing on top
+result.km <- survfit(Surv(timeMonths, delta) ~ 1,  
+                     conf.type="none")  
+plot(result.km, 
+     conf.int=T, 
+     mark="|", 
+     xlab="Time in months",  
+     xlim=c(0,30), 
+     ylab="Survival probability")  
+lines(surv ~ times[1:(length(times) - 1)]) 
+
+# Only the first 30 months are shown here, because the smoothing procedure  doesn’t produce estimates beyond the last failure time.
+
+
+
+
+```
+
+## 3.5 Left truncation
+
+![](Chapters/images/left_censoring.png)
+
+![](Chapters/images/left_truncating_individuals.png)
+* Right censoring: Incomplete data
+
+* Left censoring: Include time from diagnosis until enrolment in trial (which has been the case so far)
+
+The times between diagnosis and entry into the trial are known as the “backward  recurrence times".
+Can be used to align to 1) time at diagnosis, 2) time of enrolment, 3) time of event or censoring
+
+
+```{r}
+tt <- c(7, 6, 6, 5, 2, 4) 
+status <- c(0, 1, 0, 0, 1, 1)  
+backTime <- c(-2, -5, -3, -3, -2, -5) 
+tm.enter <- -backTime  
+tm.exit <- tt - backTime  
+
+# Countaing
+result.left.trunc.km <- survfit(Surv(tm.enter, tm.exit, status, type="counting") ~ 1, conf.type="none") 
+summary(result.left.trunc.km)  
+
+# Fleming-Harington
+result.left.trunc.naa <- survfit(Surv(tm.enter, 
+                                      tm.exit, 
+                                      status,
+                                      type="counting") ~ 1, 
+                                 type="fleming-harrington", 
+                                 conf.type="none")
+summary(result.left.trunc.naa)  
+
+
+```
+
+```{r}
+
+# Channing House - Entry and death/censoryship at retirement home
+library(boot)
+data(channing)
+ChanningHouse = channing
+head(ChanningHouse)
+
+ChanningHouse$entryYears = ChanningHouse$entry/12
+ChanningHouse$exitYears = ChanningHouse$exit/12
+ChanningMales <- ChanningHouse[ChanningHouse$sex=="Male",]
+head(ChanningMales)
+nrow(ChanningMales)
+# Analysis
+result.km <- survfit(Surv(entryYears, 
+                          exitYears, 
+                          cens,  
+                          type="counting") ~ 1,
+                     data=ChanningMales)  
+plot(result.km, xlim=c(64, 101), 
+     ylim = c(0,1),
+     xlab="Age",  
+     ylab="Survival probability", 
+     conf.int=F)  
+result.naa <- survfit(Surv(entryYears, 
+                           exitYears, 
+                           cens,  
+                           type="counting") ~ 1, 
+                      type="fleming-harrington",  
+                      data=ChanningMales)  
+lines(result.naa, 
+      col="blue", 
+      conf.int=F) 
+
+# The plot is shown in Fig. 3.10. 
+# The black curve is the Kaplan-Meier estimate; it  plunges to zero at age 65 because, at this early age, the size of the risk set is  small, and in fact reduces to 0.
+# This forces the survival curve to zero.
+
+# The problem here is that there is too little data to accurately estimate the overall  survival distribution of men.  
+
+result.km.68 <- survfit(Surv(entryYears, exitYears, cens, type="counting") ~ 1, start.time=68, data=ChanningMales) 
+lines(result.km.68, col="green", conf.int=T)
+legend("topright", legend=c("KM", "NAA", "KM 68 and older"),lty=1, col=c("black", "blue", "green")) 
+
+
+```
+
+## Exercises
+
+```{r}
+
+# Exercises  3.1. Refer to Fig. 3.2. Find the median survival, and a 95% confidence interval for  the median. Explain why the upper limit of the confidence interval is undefined.  
+
+#3.2. In Fig. 3.3, find the first and third quartiles, and 95% confidence intervals for  these quartiles. If any of these quantities are undefined, explain.  
+
+# 3.3. Find a smooth hazard function estimate for the gastric cancer data using kernel  width “bw.grid = 20”. Explain reason for the multiple peaks in the estimate.  
+
+# 3.4. Estimate the survival distribution for men, conditional on reaching the age of  68, ignoring the left truncation times. Discuss the bias of this estimate by comparing  to the estimate presented in Sect. 3.4. 
+
+
+```
+
+
+
+

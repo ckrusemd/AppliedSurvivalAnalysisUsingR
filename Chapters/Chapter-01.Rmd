@@ -5,6 +5,265 @@ output: html_document
 
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
 ```
 
 # Chapter 1
+
+## Survival Data and Censoring 
+
+A key characteristic of survival data is that the response variable is a non-negative  discrete or continuous random variable, and represents the time from a welldefined origin to a well-defined event.
+
+The most common example of this is **right censoring**, which results when the final  endpoint is only known to exceed a particular value.
+
+Less commonly one may have **left censoring**,  where events are known to have occurred before a certain time, or interval censoring,  where the failure time is only known to have occurred within a specified interval of  time.
+
+### Censoring types
+
+Censoring may be classified into three types: 
+
+* Type I
+
+> Type I censoring, the censoring times are pre-specified. For example, in an animal  experiment, a cohort of animals may start at a specific time, and all followed until  a pre-specified ending time. Animals which have not experienced the event of  interest before the end of the study are then censored at that time. Another example,  discussed in detail in Example 1.5, is a smoking cessation study, where by design  each subject is followed until relapse (return to smoking) or 180 days, whichever  comes first. Those subjects who did not relapse within the 180 day period were  censored at that time.  Type II
+
+* Type II
+
+> Type II censoring occurs when the experimental objects are followed until a prespecified fraction have failed. Such a design is rare in biomedical studies, but may  be used in industrial settings, where time to failure of a device is of primary interest.  An example would be one where the study stops after, for instance, 25 out of 100  devices are observed to fail. The remaining 75 devices would then be censored. In  this example, the smallest 25% of the ordered failure times are observed, and the  remainder are censored.  The
+
+* Random.
+
+> The last general category of censoring is random censoring. Careful attention to  the cause of the censoring is essential in order to avoid biased survival estimates. In  biomedical settings, one cause of random censoring is patient dropout. If the dropout  occurs truly at random, and is unrelated to the disease process, such censoring may  not cause any problems with bias in the analysis. But if patients who are near death  are more likely to drop out than other patients, serious biases may arise. Another  cause of random censoring is competing events. For instance, in Example 1.4, the  primary outcome is time to death from prostate cancer. But when a patient dies of  another cause first, then that patient will be censored, since the time he would have  died of prostate cancer (had he not died first of the other cause) is unknown. The  question of independence of the competing
+
+
+![](Chapters/images/fig_1_1.png)
+
+![](Chapters/images/fig_1_2.png)
+
+![](Chapters/images/fig_1_2_1.png)
+
+* 3 patients right-censored
+* 3 patients with complete information
+
+## Other types of censoring
+
+**Administrative censoring** has the property that the censoring mechanism is  (ordinarily) independent of the survival mechanism, and such censoring can be  accommodated using the techniques described in the remainder of the book.
+
+* Non-informative: If these patients drop out for reasons  unrelated to the outcome, this form of censoring, like that due to patients remaining  alive at the end of the follow-up period,
+* Informative: If individuals in a  clinical trial tend to drop out of the study (and become lost to follow-up) for reasons  related to the failure process.
+
+## Examples
+
+* "ashkenazi.rda"
+* "ChanningHouse.rda"
+* "gastricXelox.rda"
+* "hepatoCellular.rda"
+* "pancreatic.rda"   
+* "pancreatic2.rda"
+* "pharmacoSmoking.rda"
+* "prostateSurvival.rda"
+
+```{r include=FALSE}
+
+knitr::opts_chunk$set(root.dir ="C:/Users/Christian/OneDrive/R/AppliedSurvivalAnalysisUsingR/Chapters")
+
+library(tidyr)
+library(dplyr)
+```
+
+## Xeloda example
+
+This is a Phase II (single sample) clinical trial of Xeloda and oxaliplatin (XELOX)  chemotherapy given before surgery to 48 advanced gastric cancer patients with paraaortic lymph node metastasis (Wang et al. [74]). 
+
+An important survival outcome of  interest is **progression-free survival**, which is the time from entry into the clinical  trial until progression or death, whichever comes first.
+
+* Delta 0: Alive after 43 weeks
+* Delta 1: Progression or Death
+
+```{r }
+
+# list.files()
+load("Chapters/data/gastricXelox.rda")
+gastricXelox %>% as_tibble() %>% slice_head(n = 5) %>% knitr::kable()
+
+summary(gastricXelox)
+
+ggplot(gastricXelox,aes(x=timeWeeks,y=delta)) + geom_point()
+
+ggplot(gastricXelox,aes(x=timeWeeks,fill=delta,group=delta)) + geom_histogram()
+
+gastricXelox %>% 
+  dplyr::mutate(ptid=row_number(),
+                timeStart=0) %>% 
+  gather(timeType,timeValue,timeStart,timeWeeks) %>% 
+  ggplot(.,aes(x=timeValue,y=ptid)) +
+  geom_line(aes(group=ptid)) +
+  geom_point(aes(shape=factor(delta),color=factor(delta))) +
+  geom_vline(xintercept = 42)
+
+```
+
+## Pancreas
+
+- Progression-free survival
+
+>This is also a single sample Phase II study of a chemotherapeutic compound, and  the main purpose was to assess overall survival and also “progression-free survival”,  which is defined as the time from entry into the trial until disease progression  or death, whichever comes first. 
+
+> A secondary interest in the study is to compare  the prognosis of patients with locally advanced disease as compared to metastatic  disease. 
+
+```{r }
+
+load("Chapters/data/pancreatic.rda")
+pancreatic %>% as_tibble() %>% slice_head(n = 5) %>% knitr::kable()
+
+summary(pancreatic)
+
+### Recoding
+
+df.pancreatic = 
+  pancreatic %>% 
+  dplyr::mutate(onstudy=mdy(onstudy),
+                progression=mdy(progression),
+                death=mdy(death)) %>% 
+  dplyr::mutate(TimeToEvent=difftime(progression,onstudy,units = "days")) %>% 
+  dplyr::mutate(ptid=row_number()) %>% 
+  gather(DateType,Date,onstudy,progression,death)
+
+ggplot(df.pancreatic,aes(x=Date,y=ptid,color=DateType)) + 
+  geom_point() + 
+  geom_line(aes(group=ptid))
+
+
+ggplot(df.pancreatic,aes(x=Date,y=ptid,color=DateType)) + 
+  geom_point() + 
+  geom_line(aes(group=ptid)) +
+  facet_wrap(~stage)
+
+```
+
+## Prostate Cancer
+
+In this data set there are two outcomes of interest, death from prostate cancer and  death from other causes, so we have what is called a **competing risks survival  analysis problem**.
+
+* 1: Died of prostate cancer
+* 2: Died of other cause
+* 0: Still alive
+
+Grade, stage, age group
+
+```{r}
+
+load("Chapters/data/prostateSurvival.rda")
+prostateSurvival %>% as_tibble() %>% slice_head(n = 5) %>% knitr::kable()
+
+### Recoding
+
+df.prostateSurvival =
+  prostateSurvival %>% 
+  dplyr::mutate(ptid=row_number(),
+                timeStart=0) %>% 
+  gather(TimeType,Time,timeStart,survTime)
+
+ggplot(df.prostateSurvival,aes(x=Time,y=ptid,color=TimeType)) + 
+  geom_point() + 
+  geom_line(aes(group=ptid))
+
+ggplot(prostateSurvival,aes(x=survTime)) + 
+  geom_histogram()
+
+ggplot(prostateSurvival,aes(x=survTime)) + 
+  geom_histogram() +
+  facet_wrap(~status)
+
+```
+
+
+## Smoking Aid
+
+> The variable **“ttr”** is the number of days without smoking (“time to relapse”), and  **“relapse=1”** indicates that the subject started smoking again at the given time. The  variable **“grp”** is the treatment indicator, and **“employment”** can take the values **“ft”**  (full time), **“pt”** (part time), or **“other”**. The primary objectives were to compare the  two treatment therapies with regard to time to relapse, and to identify other factors  related to this outcome. 
+
+```{r}
+
+load("Chapters/data/pharmacoSmoking.rda")
+pharmacoSmoking %>% as_tibble() %>% slice_head(n = 5) %>% knitr::kable()
+
+df.pharmacoSmoking =
+  pharmacoSmoking %>% 
+  arrange(ttr) %>% 
+  dplyr::mutate(id = factor(id,levels=.$id))
+
+ggplot(df.pharmacoSmoking,aes(x=ttr,y=id)) +
+  geom_point(aes(color=gender))
+
+```
+
+
+## Hepato Cellular Cancer
+
+This study (Li et al. [42, 43]) focused on using expression of a chemokind  known as CXCL17.
+
+```{r}
+
+load("Chapters/data/hepatoCellular.rda")
+hepatoCellular %>% as_tibble() %>% slice_head(n = 5) %>% knitr::kable()
+
+
+df.hepatoCellular =
+  hepatoCellular %>% 
+  arrange(OS) %>% 
+  dplyr::mutate(Number = factor(Number,levels=.$Number))
+
+ggplot(df.hepatoCellular,aes(x=OS,y=Number)) +
+  geom_point(aes(color=Gender))
+
+
+```
+
+## Exercises
+
+### 1.1
+
+> Re-write these survival times in terms of patient time, and create a simple data  set listing the survival time and censoring indicator for each patient. How many  patients died? How many person-years are there in this trial? What is the death rate  per person-year?
+
+![](Chapters/images/ex_1_1.png)
+
+```{r}
+
+df.ex_1_1 =  data.frame(id=seq(5),
+                        survTime=c(5,5,4,3,1),
+                        event=c(0,0,1,1,1))
+
+sum(df.ex_1_1$event==1)
+
+sum(df.ex_1_1$survTime)
+
+sum(df.ex_1_1$event==1)/sum(df.ex_1_1$survTime)
+
+```
+
+### 1.2
+
+> For the “gastricXelox” data set, use R to determine how many patients had the  event (death or progression), the number of person-weeks of follow-up time, and  the event rate per person-week. 
+
+```{r}
+
+sum(gastricXelox$delta==1)
+
+sum(gastricXelox$timeWeeks)
+
+
+sum(gastricXelox$delta==1)/sum(gastricXelox$timeWeeks)
+
+```
+
+
+
+
+
+
+
+
+
+

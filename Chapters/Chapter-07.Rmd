@@ -8,3 +8,112 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Chapter 7
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+library(survival)
+library(tidyr)
+library(dplyr)
+library(knitr)
+library(stats)
+```
+
+## Model Selection and Interpretation 
+
+### 7.1.1 Martingale and Deviance Residuals
+
+> An important tool for assessing the goodness of fit of a model is to compare the  censoring indicator (0 for censored, 1 for death) for each subject to the expected  value of that indicator under the proportional hazards Cox model. If there are no time  dependent covariates and if the survival times are right-censored, this is given by 
+
+![](Chapters/images/martin_residuals.png)
+
+> These residuals, which originate from the counting process theory underlying the  Cox proportional hazards model, sum to 1, range in value from -infinity to a maximum  of 1, and each has an expected value of zero.
+
+
+
+```{r residuals}
+data(pharmacoSmoking)
+attach(pharmacoSmoking)
+priorAttemptsT <- priorAttempts  
+priorAttemptsT[priorAttempts > 20] <- 20  
+
+library(survival) 
+result.0.coxph <- coxph(Surv(pharmacoSmoking$ttr, pharmacoSmoking$relapse) ~ 1)  
+rr.0 <- residuals(result.0.coxph, type="martingale") 
+
+
+```
+
+
+```{r}
+
+smoothSEcurve <- function(yy, xx) {  
+  xx.list <- min(xx) + ((0:100)/100)*(max(xx) - min(xx)) 
+  yy.xx <- predict(loess(yy ~ xx), se=T,  newdata=data.frame(xx=xx.list)) 
+
+  lines(yy.xx$fit ~ xx.list, lwd=2)  
+  lines(yy.xx$fit -  qt(0.975, yy.xx$df)*yy.xx$se.fit ~ xx.list, lty=2)  
+  lines(yy.xx$fit +  qt(0.975, yy.xx$df)*yy.xx$se.fit ~ xx.list, lty=2)  
+  } 
+
+par(mfrow=c(3,2)) 
+
+plot(rr.0 ~ pharmacoSmoking$age)  
+smoothSEcurve(rr.0, pharmacoSmoking$age)  
+title("Martingale residuals\nversus age")  
+logAge <- log(pharmacoSmoking$age)  
+
+plot(rr.0 ~ logAge)  
+smoothSEcurve(rr.0, logAge)  
+title("Martingale residuals\nversus log age") 
+
+plot(rr.0 ~ priorAttemptsT) 
+smoothSEcurve(rr.0, priorAttemptsT)  
+title("Martingale residuals versus\nprior attempts")  
+
+logPriorAttemptsT <- log(priorAttemptsT + 1)  
+plot(rr.0 ~ logPriorAttemptsT)  
+smoothSEcurve(rr.0, logPriorAttemptsT)
+title("Martingale residuals versus\nlog prior attempts") 
+
+plot(rr.0 ~ longestNoSmoke) 
+smoothSEcurve(rr.0, longestNoSmoke) 
+title("Martingale residuals versus\n  + longest period without smoking")  
+
+logLongestNoSmoke <- log(longestNoSmoke+1)  
+plot(rr.0 ~ logLongestNoSmoke)
+smoothSEcurve(rr.0, logLongestNoSmoke)
+title("Martingale residuals versus\n  + log of longest period without smoking")  
+
+
+```
+
+### After AIC
+
+
+
+```{r}
+result.grp.coxph <- coxph(Surv(pharmacoSmoking$ttr, pharmacoSmoking$relapse) ~ pharmacoSmoking$grp)  
+
+result.step <- step(result.grp.coxph, scope=list(upper=~ pharmacoSmoking$grp + pharmacoSmoking$gender + pharmacoSmoking$race + pharmacoSmoking$employment + pharmacoSmoking$yearsSmoking +  pharmacoSmoking$levelSmoking + pharmacoSmoking$age + pharmacoSmoking$priorAttempts +  pharmacoSmoking$longestNoSmoke, lower=~pharmacoSmoking$grp)) 
+
+rr.final <- residuals(result.step, type="martingale") 
+par(mfrow=c(2,2)) 
+
+plot(rr.final ~ pharmacoSmoking$age)  
+smoothSEcurve(rr.final, pharmacoSmoking$age)
+title("Martingale residuals\nversus age")  
+plot(rr.final ~ pharmacoSmoking$grp)
+title("Martingale residuals\nversus treatment group") 
+plot(rr.final ~ pharmacoSmoking$employment)  
+title("Martingale residuals\nversus employment")  
+
+
+```
+
+> The results, shown in Fig. 7.2, show that the residuals treatment group and  employment are evenly distributed over the values of the covariates. The variable  “age” still shows some possible deviation, but it is much improved over the plot for  the null model.  age  rr.final  Martingale residuals  versus age  grp  rr.final  Martingale residuals  versus treatment group  20 30 40 50 60 70 80  −2.0  −1.5  −1.0  −0.5  0.0  0.5  1.0 
+
+
+
+
+
