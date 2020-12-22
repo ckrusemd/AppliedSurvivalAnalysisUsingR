@@ -5,15 +5,16 @@ output: html_document
 
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(survminer)
 ```
 
 # Chapter 3
 
 ## Non-Parametric Survival Curve Estimation
 
-The most widely used of these is the productlimit estimator, also known as the Kaplan-Meier estimator. 
+Best known is the Kaplan-Meier estimator. 
 
-This estimator, first  proposed by Kaplan and Meier [35], is the product over the failure times of the  conditional probabilities of surviving to the next failure time.
+This estimator, first proposed by Kaplan and Meier [35], is the product over the failure times of the conditional probabilities of surviving to the next failure time.
 
 ![](Chapters/images/kaplan_meier.png)
 
@@ -78,7 +79,7 @@ timeMonths <- gastricXelox$timeWeeks*7/30.25
 delta <- gastricXelox$delta
 fit.surv <- survfit(Surv(timeMonths,delta) ~ 1, conf.type="log-log")
 summary(fit.surv)
-plot(fit.surv)
+plot(fit.surv,mark="X")
 ```
 
 ### Median Follow Up Time
@@ -91,12 +92,29 @@ delta.followup <- 1 - delta
 fit.surv.delta <- survfit(Surv(timeMonths,delta.followup) ~ 1, conf.type="log-log")
 fit.surv.delta
 summary(fit.surv.delta)
-
 plot(fit.surv.delta)
 
 ```
 
-### Kernel smoothing
+```{r}
+
+
+# Progression free survival in gastric cancer
+data(gastricXelox)
+timeMonths <- gastricXelox$timeWeeks*7/30.25
+delta <- gastricXelox$delta
+fit.surv <- survfit(Surv(timeMonths,delta) ~ 1, conf.type="log-log")
+summary(fit.surv)
+ggsurvplot(fit = fit.surv,data = gastricXelox,surv.median.line = "hv")
+
+mean(gastricXelox$timeWeeks)
+median(gastricXelox$timeWeeks)
+
+```
+
+### 3.4 Obtaining a Smoothed Hazard and Survival Function  Estimate 
+
+When you need to establish the hazard function as well as survival function.
 
 `Epanechnikov kernel`
 
@@ -116,23 +134,48 @@ plot(result.simple)
 ```
 
 ### Example from the gastricXelox data
-```{r}
 
+First, let us divide time into equal intervals of width 5 months, and observe the  number of events (progression or death) di and the number of patients at risk each  interval,
+
+
+```{r}
 # Showing 5 months, 1 month and then Smoothed data
 
 result.pe5 <- pehaz(timeMonths, 
                     delta, 
                     width=5, # width of 5 months
-                    max.time=20)
+                    max.time=30)
+result.pe5
+
+plot(result.pe5, 
+     ylim=c(0,0.15), 
+     col="black")  
+```
+
+In the same figure, we  also present the step function for 1-month intervals: 
+
+```{r}
 result.pe1 <- pehaz(timeMonths, 
                     delta, 
                     width=1, 
-                    max.time=20)  
+                    max.time=30)  
+result.pe1
+
+plot(result.pe5, 
+     ylim=c(0,0.15), 
+     col="black")  
+lines(result.pe1)
+```
+
+For best results for visualizing the hazard  function, we may compute a smooth hazard estimate using the following code: 
+
+```{r}
 result.smooth <- muhaz(timeMonths, 
                        delta, 
                        bw.smooth=20,  # Smoothing parameter of 20
                        b.cor="left", 
-                       max.time=20)  
+                       max.time=30)  
+result.smooth
 
 # Plot the three on top of each other
 
@@ -142,7 +185,12 @@ plot(result.pe5,
 lines(result.pe1) 
 lines(result.smooth) 
 
-# Convert to survival functions
+```
+
+Convert to survival functions
+
+```{r}
+
 haz <- result.smooth$haz.est
 times <- result.smooth$est.grid 
 surv <- exp(-cumsum(haz[1:(length(haz)-1)]*diff(times)))  
@@ -174,7 +222,7 @@ lines(surv ~ times[1:(length(times) - 1)])
 
 * Left censoring: Include time from diagnosis until enrolment in trial (which has been the case so far)
 
-The times between diagnosis and entry into the trial are known as the “backward  recurrence times".
+The times between diagnosis and entry into the trial are known as the **“backward  recurrence times"**.
 Can be used to align to 1) time at diagnosis, 2) time of enrolment, 3) time of event or censoring
 
 
@@ -202,7 +250,6 @@ summary(result.left.trunc.naa)
 ```
 
 ```{r}
-
 # Channing House - Entry and death/censoryship at retirement home
 library(boot)
 data(channing)
@@ -214,6 +261,21 @@ ChanningHouse$exitYears = ChanningHouse$exit/12
 ChanningMales <- ChanningHouse[ChanningHouse$sex=="Male",]
 head(ChanningMales)
 nrow(ChanningMales)
+
+# Histogram
+min(ChanningHouse$entryYears)
+sum(ChanningHouse$entryYears>=65) # 450
+sum(ChanningHouse$entryYears<65) # 12
+```
+
+The kaplan-meier estimate then plunges to near-zero when the age is 65 because of left truncation.
+
+```{r}
+ChanningHouse %>% ggplot(.,aes(x=entryYears)) + geom_histogram() + geom_vline(xintercept = 65)
+
+# Survival table
+survfit(Surv(ChanningHouse$entryYears, ChanningHouse$exitYears, ChanningHouse$cens, type="counting") ~ 1, conf.type="none") 
+
 # Analysis
 result.km <- survfit(Surv(entryYears, 
                           exitYears, 
@@ -250,18 +312,108 @@ legend("topright", legend=c("KM", "NAA", "KM 68 and older"),lty=1, col=c("black"
 
 ## Exercises
 
+### Exercise 3.1
+
+> Refer to Fig. 3.2. Find the median survival, and a 95% confidence interval for  the median. Explain why the upper limit of the confidence interval is undefined.  
+
 ```{r}
 
-# Exercises  3.1. Refer to Fig. 3.2. Find the median survival, and a 95% confidence interval for  the median. Explain why the upper limit of the confidence interval is undefined.  
+# Translating the table to a Kaplan Meier estimate
+tt <- c(7,6,6,5,2,4)
+cens <- c(0,1,0,0,1,1)
+df.kme = data.frame(tt=tt,cens=cens)
 
-#3.2. In Fig. 3.3, find the first and third quartiles, and 95% confidence intervals for  these quartiles. If any of these quantities are undefined, explain.  
+result.km <- survfit(Surv(tt, cens) ~ 1)
+summary(result.km)
 
-# 3.3. Find a smooth hazard function estimate for the gastric cancer data using kernel  width “bw.grid = 20”. Explain reason for the multiple peaks in the estimate.  
+ggsurvplot(result.km,data=df.kme,surv.median.line = "hv")
 
-# 3.4. Estimate the survival distribution for men, conditional on reaching the age of  68, ignoring the left truncation times. Discuss the bias of this estimate by comparing  to the estimate presented in Sect. 3.4. 
+0.667+1.96*0.192
 
 
 ```
+
+### Exercise 3.2
+
+> In Fig. 3.3, find the first and third quartiles, and 95% confidence intervals for  these quartiles. If any of these quantities are undefined, explain. 
+
+```{r}
+
+
+# Progression free survival in gastric cancer
+data(gastricXelox)
+timeMonths <- gastricXelox$timeWeeks*7/30.25
+delta <- gastricXelox$delta
+fit.surv <- survfit(Surv(timeMonths,delta) ~ 1)
+
+summary(fit.surv)
+
+ggsurvplot(fit = fit.surv,data = gastricXelox,surv.median.line = "hv")
+
+quantile(fit.surv) 
+
+# Lowest survival is 0.273
+
+```  
+
+### Exercise 3.3
+
+> Find a smooth hazard function estimate for the gastric cancer data using kernel  width “bw.grid = 20”. Explain reason for the multiple peaks in the estimate.  
+
+```{r}
+
+
+result.simple <- muhaz(gastricXelox$timeWeeks,  # failure time
+                       gastricXelox$delta, # censoring indicators
+                       # max.time=30,  # maximum time
+                       bw.grid=20, # smoothing parameter
+                       bw.method="global", # constant smoothing all time
+                       b.cor="none" # no boundary connection
+                       )
+plot(result.simple)  
+
+# Explain
+
+gastricXelox %>% ggplot(.,aes(x=timeWeeks)) + geom_histogram(bins = 100)
+
+```
+
+### Exercise 3.4
+
+> Estimate the survival distribution for men, conditional on reaching the age of  68, ignoring the left truncation times. Discuss the bias of this estimate by comparing  to the estimate presented in Sect. 3.4. 
+
+```{r}
+
+ChanningHouse.bias = ChanningHouse[ChanningHouse$sex=="Male",]
+
+# Analysis
+result.km <- survfit(Surv(entryYears, 
+                          exitYears, 
+                          cens,  
+                          type="counting") ~ 1,
+                     data=ChanningHouse.bias)  
+plot(result.km, xlim=c(64, 101), 
+     ylim = c(0,1),
+     xlab="Age",  
+     ylab="Survival probability", 
+     conf.int=F)  
+
+# Conditional
+
+result.km.68 <- survfit(Surv(entryYears, exitYears, cens, type="counting") ~ 1, start.time=68, data=ChanningHouse.bias) 
+
+plot(result.km.68, xlim=c(64, 101), 
+     ylim = c(0,1),
+     xlab="Age",  
+     ylab="Survival probability", 
+     conf.int=F)  
+lines(result.km.68, col="green", conf.int=T)
+legend("topright", legend=c("KM", "NAA", "KM 68 and older"),lty=1, col=c("black", "blue", "green")) 
+
+
+
+```
+
 
 
 
