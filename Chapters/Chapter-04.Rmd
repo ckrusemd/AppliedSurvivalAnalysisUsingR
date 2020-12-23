@@ -12,6 +12,10 @@ options(scipen=999)
 library(survival)
 library(lubridate)
 library(dplyr)
+library(tidyr)
+library(asaur)
+library(ggplot2)
+library(survminer)
 ```
 
 ## Nonparametric Comparison of Survival  Distributions 
@@ -43,7 +47,8 @@ This probability mass function allows one to compute  the probability of each po
 
 We may sum up over all the tables the differences between the observed and  expected values to get a linear test statistic `U0`, and also the sum of the variances `V0` as follows,
 
-This test is known as the *log-rank test*. We illustrate it’s calculation in the following  example. 
+This test is known as the *log-rank test*. The test is similar/identical to the the Cochran-Mantel-Haenzel where a test of independence by two factors (e.g. treatment and placebo) is done adjusted for a potential confounder.
+
 
 ## Example of testing
 
@@ -74,6 +79,9 @@ survdiff(Surv(tt, delta) ~ trt)
 
 
 ```{r}
+library(asaur)
+attach(pancreatic)
+
 data(pancreatic)
 
 pancreatic
@@ -86,10 +94,23 @@ pancreatic$time.progressionFreeSurvival = as.numeric(difftime(pancreatic$progres
 
 pancreatic$status = ifelse(is.na(pancreatic$progression),0,1)
 
-# survdiff(Surv(pancreatic$time.progressionFreeSurvival,pancreatic$stage)~pancreatic$status)
-survdiff(Surv(pancreatic$time.progressionFreeSurvival)~pancreatic$stage)
+# Show patients
+ggplot(pancreatic %>% 
+         dplyr::mutate(ptid=row_number()) %>% 
+         gather(eventType,eventDate,onstudy:death),aes(x=eventDate,y=ptid)) + 
+  geom_point() +
+  geom_line(aes(group=ptid,color=status)) +
+  facet_wrap(~stage)
 
-plot(survfit(Surv(pancreatic$time.progressionFreeSurvival)~pancreatic$stage),col=c ("blue ", " red"),lwd=2)
+# Surv fit
+survdiff.surv.pancreatic = 
+  survdiff(Surv(pancreatic$time.progressionFreeSurvival)~pancreatic$stage)
+survfit.surv.pancreatic = 
+  survfit(Surv(pancreatic$time.progressionFreeSurvival)~pancreatic$stage)
+
+ggsurvplot(survfit.surv.pancreatic,data=pancreatic,conf.int = TRUE,surv.median.line = "hv")
+
+plot(survfit.surv.pancreatic,col=c ("blue ", " red"),lwd=2)
 legend("topright",
        legend=c ("Locally advanced ", " Metastatic"),
        col=c ("blue "," red"),lwd=2) 
@@ -129,20 +150,110 @@ plot(survfit_,conf.int = F,col = c("blue","green","red","black"))
 survdiff_
 survfit_
 
+ggsurvplot(survfit_,data=pharmacoSmoking,conf.int = TRUE)
 # Worst: patch only, young people - median 14
 # Best: combo 50+ - median never reached, lower cl 75
 
 ```
 
-## Exercises 
+### Example 4.2 of clinical trial
+
 ```{r}
-# 4.1. Using the pharmacoSmoking data, compare the two treatments using the  Prentice modification of the Gehan test, and compare your results to those from  the log-rank test.  
 
-# 4.2. Again using the pharmacoSmoking data, carry out a log-rank test comparing  the two treatments stratifying on employment status.  
+lambda.mutant.0 <- 0.03
+lambda.mutant.1 <- 0.03*0.55
+lambda.wt.0 <- 0.03*0.2
+lambda.wt.1 <- 0.03*0.2*0.55  
 
-# 4.3. Using the “pancreatic” data set, which has no censored observations, compare  the two groups using a Wilcoxon rank-sum test, using the “wilcox.test” function  in base R. Compare your results to those from the log-rank and Prentice-modified  Gehan tests.  
+c(lambda.mutant.0,lambda.mutant.1,
+  lambda.wt.0,lambda.wt.1)
 
-# 4.4. Again using the “pancreatic” data set, compare the two groups using overall  survival as the outcome, using both the log-rank test and the Prentice modification  of the Gehan test. Do these two tests yield different results? 
+set.seed(4321)
+tt.control.mutant <- rexp(25, rate=lambda.mutant.0)
+tt.treat.mutant <- rexp(125, rate=lambda.mutant.1)
+tt.control.wt <- rexp(125, rate=lambda.wt.0)
+tt.treat.wt <- rexp(25, rate=lambda.wt.1)
+ttAll <- c(tt.control.mutant, tt.treat.mutant, tt.control.wt,  tt.treat.wt)
+status <- rep(1, length(ttAll))
+genotype <- c(rep("mutant", 150), rep("wt", 150))
+trt <- c(rep(0, 25), rep(1, 125), rep(0, 125), rep(1, 25)) 
+
+df.trial = data.frame(ttAll,status,genotype,trt)
+
+survdiff.trial.confounded = survdiff(Surv(ttAll, status) ~ trt,data = df.trial) 
+survfit.trial.confounded = survfit(Surv(ttAll, status) ~ trt,data = df.trial)
+
+survdiff.trial.adjusted = survdiff(Surv(ttAll, status) ~ trt+genotype,data = df.trial) 
+survfit.trial.adjusted = survfit(Surv(ttAll, status) ~ trt+genotype,data = df.trial)
+
+ggsurvplot(survfit.trial.confounded,data=df.trial,conf.int = T)
+ggsurvplot(survfit.trial.adjusted,data=df.trial,conf.int = T)
+
+```
+
+## Exercises 
+
+### Exercise 4.1
+
+> Using the pharmacoSmoking data, compare the two treatments using the  Prentice modification of the Gehan test, and compare your results to those from  the log-rank test.  
+
+```{r}
+
+# By age group as well
+table(pharmacoSmoking$ageGroup2)
+surv_ <- Surv(pharmacoSmoking$ttr,pharmacoSmoking$relapse)
+survdiff_ <- survdiff(surv_ ~ pharmacoSmoking$grp)
+survdiff_Prentice <- survdiff(surv_ ~ pharmacoSmoking$grp,rho=1)
+survdiff_
+survdiff_Prentice
+
+```
+
+
+### Exercise 4.2. 
+
+> Again using the pharmacoSmoking data, carry out a log-rank test comparing  the two treatments stratifying on employment status.  
+
+
+```{r}
+
+# By age group as well
+surv_ <- Surv(pharmacoSmoking$ttr,pharmacoSmoking$relapse)
+survdiff_ <- survdiff(surv_ ~ pharmacoSmoking$grp + pharmacoSmoking$employment)
+survdiff_Prentice <- survdiff(surv_ ~ pharmacoSmoking$grp + pharmacoSmoking$employment,rho=1)
+survdiff_
+survdiff_Prentice
+
+```
+
+### Exercise 4.3. 
+
+> Using the “pancreatic” data set, which has no censored observations, compare  the two groups using a Wilcoxon rank-sum test, using the “wilcox.test” function  in base R. Compare your results to those from the log-rank and Prentice-modified  Gehan tests.  
+
+
+```{r}
+
+wilcox.test(time.progressionFreeSurvival~stage)
+
+surv_ <- Surv(pancreatic$time.progressionFreeSurvival,pancreatic$status)
+survdiff(surv_ ~ pancreatic$stage,rho=0)
+survdiff(surv_ ~ pancreatic$stage,rho=1)
+
+```
+
+### Exercise 4.4. 
+
+> Again using the “pancreatic” data set, compare the two groups using overall  survival as the outcome, using both the log-rank test and the Prentice modification  of the Gehan test. Do these two tests yield different results? 
+
+```{r}
+
+wilcox.test(time.progressionFreeSurvival~stage)
+
+pancreatic_ = pancreatic %>% dplyr::mutate(OS = as.integer(difftime(death,onstudy,units="days")))
+
+surv_ <- Surv(pancreatic_$OS,pancreatic_$status)
+survdiff(surv_ ~ pancreatic$stage,rho=0)
+survdiff(surv_ ~ pancreatic$stage,rho=1)
 
 ```
 
