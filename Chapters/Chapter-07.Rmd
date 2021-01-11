@@ -7,7 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Chapter 7
+# Chapter 7: Model Diagnostics
 
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -17,9 +17,14 @@ library(tidyr)
 library(dplyr)
 library(knitr)
 library(stats)
+library(asaur)
+library(survminer)
 ```
 
-## Model Selection and Interpretation 
+## 7.1 Assessing Goodness of Fit Using Residuals  
+
+The residuals are plotted versus  some quantity, such as a covariate value, and the observed pattern is used to diagnose  possible problems with the fitted model.
+
 
 ### 7.1.1 Martingale and Deviance Residuals
 
@@ -29,6 +34,12 @@ library(stats)
 
 > These residuals, which originate from the counting process theory underlying the  Cox proportional hazards model, sum to 1, range in value from -infinity to a maximum  of 1, and each has an expected value of zero.
 
+
+### Example 7.1
+
+A null model is one with no fitted covariates. There is  still a partial likelihood, and the model produces martingale residuals which take the  form mi D ıi  HO  0.ti/ exp.z0 ˇ/:
+
+We first read in the data and truncate the variable  “priorAttempts” at 20, since recorded values of this variable that exceed 20 are not  likely to be correct,  >
 
 
 ```{r residuals}
@@ -97,6 +108,8 @@ result.grp.coxph <- coxph(Surv(pharmacoSmoking$ttr, pharmacoSmoking$relapse) ~ p
 
 result.step <- step(result.grp.coxph, scope=list(upper=~ pharmacoSmoking$grp + pharmacoSmoking$gender + pharmacoSmoking$race + pharmacoSmoking$employment + pharmacoSmoking$yearsSmoking +  pharmacoSmoking$levelSmoking + pharmacoSmoking$age + pharmacoSmoking$priorAttempts +  pharmacoSmoking$longestNoSmoke, lower=~pharmacoSmoking$grp)) 
 
+result.step
+
 rr.final <- residuals(result.step, type="martingale") 
 par(mfrow=c(2,2)) 
 
@@ -112,6 +125,196 @@ title("Martingale residuals\nversus employment")
 ```
 
 > The results, shown in Fig. 7.2, show that the residuals treatment group and  employment are evenly distributed over the values of the covariates. The variable  “age” still shows some possible deviation, but it is much improved over the plot for  the null model.  age  rr.final  Martingale residuals  versus age  grp  rr.final  Martingale residuals  versus treatment group  20 30 40 50 60 70 80  −2.0  −1.5  −1.0  −0.5  0.0  0.5  1.0 
+
+
+## 7.1.2 Case Deletion Residuals  
+
+Find the change in coefficient when deleting an individual-
+
+First, we find the coefficient for age (the fourth coefficient) using all  the data:  
+
+```{r}
+
+result.coxph <- coxph(Surv(ttr, relapse) ~ grp + employment  + age)  
+
+coef.all <- result.coxph$coef[4]
+
+coef.all
+
+
+```
+
+Find the individual
+
+```{r}
+
+resid.dfbeta <- residuals(result.coxph, type="dfbeta")  
+n.obs <- length(ttr)  
+index.obs <- 1:n.obs  
+plot(resid.dfbeta[,4] ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbeta[,4] ~ index.obs)  
+
+
+```
+
+## 7.2 Checking the Proportion Hazards Assumption  
+
+If one has a binary predictor variable,  such as experimental vs. standard treatment, what this assumption means is that the  hazard functions are proportional, and hence that the log-hazards are separated by  a constant at all time points. 
+
+Similarly, a categorical variable with many levels will  result in parallel log hazard functions. 
+
+This assumption is at best an approximation  in practice, and minor violations are unlikely to have major effects on inferences  on model parameters.
+
+### 7.2.1 Log Cumulative Hazard Plots 
+
+When comparing survival times between two groups, assesses the `proportional hazards assumption`.
+
+```{r eval=F}
+
+data("pancreatic")
+result.surv.LA <- survfit(Surv(pfs.month) ~ stage,subset={stage == "LA"},data=pancreatic) 
+time.LA <- result.surv.LA$time  
+surv.LA <- result.surv.LA$surv  
+cloglog.LA <- log(-log(surv.LA))
+logtime.LA <- log(time.LA)  
+result.surv.M <- survfit(Surv(pfs.month) ~ stage,  + subset={stage == "M"}) 
+time.M <- result.surv.M$time  
+surv.M <- result.surv.M$surv  
+cloglog.M <- log(-log(surv.M))
+logtime.M <- log(time.M)  
+plot(cloglog.LA ~ logtime.LA, type="s", col="blue", lwd=2)
+lines(cloglog.M ~ logtime.M, col="red", lwd=2, type="s")
+legend("bottomright", legend=c("Locally advanced",  + "Metastatic"), col=c("blue","red"), lwd=2) 
+
+
+```
+
+From the partial log-likelihood function, the Schoenfeld residuals are the individual terms of the score function.
+
+Should be along 0.
+
+```{r}
+
+result.coxph <- coxph(Surv(ttr, relapse) ~ grp + employment  + age)  
+
+result.sch.resid <- cox.zph(result.coxph, transform="km")  
+
+result.sch.resid
+
+plot(result.sch.resid)
+
+```
+
+## Exercises  
+
+### 7.1. Consider the case deletion and dfbeta residuals discussed in Sect. 7.1.2. For  each of the covariates in the final pharmacoSmoking model (grp, employment levels  2 and 3 vs. 1, and age), plot the case deletion residuals versus the dfbeta residuals.  Also plot the “dfbeta” residuals versus the “dfbetas” residuals. Do you see any  differences?  
+
+```{r}
+
+
+result.coxph.grp <- coxph(Surv(ttr, relapse) ~ grp)  
+result.coxph.employment <- coxph(Surv(ttr, relapse) ~ employment)  
+result.coxph.age <- coxph(Surv(ttr, relapse) ~ age)  
+
+# GRP
+
+resid.dfbeta.grp  <- residuals(result.coxph.grp, type="dfbeta")  
+resid.dfbetas.grp  <- residuals(result.coxph.grp, type="dfbetas")  
+
+n.obs <- length(ttr)  
+index.obs <- 1:n.obs  
+
+plot(resid.dfbeta.grp ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbeta.grp ~ index.obs)  
+
+plot(resid.dfbetas.grp ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbetas.grp ~ index.obs)  
+
+# Employment
+
+resid.dfbeta.employment  <- residuals(result.coxph.employment, type="dfbeta")  
+resid.dfbetas.employment  <- residuals(result.coxph.employment, type="dfbetas")  
+
+n.obs <- length(ttr)  
+index.obs <- 1:n.obs  
+
+plot(resid.dfbeta.employment[,2] ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbeta.employment[,2] ~ index.obs)  
+
+plot(resid.dfbetas.employment[,2] ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbetas.employment[,2] ~ index.obs)  
+
+# Age
+
+resid.dfbeta.age  <- residuals(result.coxph.age, type="dfbeta")  
+resid.dfbetas.age  <- residuals(result.coxph.age, type="dfbetas")  
+
+n.obs <- length(ttr)  
+index.obs <- 1:n.obs  
+
+plot(resid.dfbeta.age ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbeta.age ~ index.obs)  
+
+plot(resid.dfbetas.age ~ index.obs, 
+     type="h",  
+     xlab="Observation", 
+     ylab="Change in coefficient")  
+abline(h=0)  
+identify(resid.dfbetas.age ~ index.obs)  
+```
+
+
+### 7.2. 
+
+> Consider the CXCL17 model you fitted in Exercise 6.1. Check the functional  form using martingale residuals, and use case-deletion residuals to identify any  outlying points. Also use Schoenfeld residuals to check the proportional hazards  assumption. 
+
+```{r}
+
+model.CXCL17.coxph <- coxph(Surv(OS, Death) ~ CXCL17T + CXCL17P + CXCL17N ,data=hepatoCellular)  
+model.CXCL17.coxph
+
+# Martingale
+ggcoxdiagnostics(model.CXCL17.coxph,type="martingale")
+
+# Case Deletion
+ggcoxdiagnostics(model.CXCL17.coxph,type="dfbeta")
+
+# Case Deletion
+ggcoxdiagnostics(model.CXCL17.coxph,type="schoenfeld")
+
+```
+
+
+
+
+
+
+
+
 
 
 
