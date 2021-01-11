@@ -7,4 +7,178 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Chapter 8
+# Chapter 8: Time Dependent Covariates 
+
+To accommodate covariates that may change  their value over time (“time dependent covariates”), special measures are necessary  to obtain valid parameter estimates. 
+
+An intervention that occurs after the start of  the trial, or a covariate (such as air pollution exposure) that changes values over the  course of the study are two examples of time dependent variables.  
+
+```{r}
+
+result.heart <- coxph(Surv(futime, fustat) ~ transplant + age + surgery, 
+                      data=jasa)  
+
+summary(result.heart)  
+
+```
+
+The problem here is that receipt of  a transplant is a time dependent covariate; patients who received a transplant had  to live long enough to receive that transplant.
+
+### Partial likelihood
+
+```{r}
+
+id <- 1:nrow(jasa)  
+jasaT <- data.frame(id, jasa)  
+id.simple <- c(2, 5, 10, 12, 28, 95)  
+heart.simple <- jasaT[id.simple,c(1, 10, 9, 6, 11)] 
+heart.simple
+summary(coxph(Surv(futime, fustat) ~ transplant,
+              data=heart.simple))  
+
+
+```
+
+Needs transformation to `start-stop` format.
+
+![](Chapters/images/8_2.png)
+
+```{r}
+
+sdata <- tmerge(heart.simple, 
+                heart.simple, 
+                id=id,
+                death=event(futime, fustat),
+                transpl=tdc(wait.time))
+heart.simple.counting <- sdata[,-(2:5)]
+heart.simple.counting
+
+summary(coxph(Surv(tstart, tstop, death) ~ transpl,
+              data=heart.simple.counting)) 
+```
+
+
+```{r eval=F}
+
+# todo does not work
+
+tdata <- jasa[, -c(1:4, 11:14)] 
+tdata$futime <- pmax(.5, tdata$futime)  
+indx <- {{tdata$wait.time == tdata$futime} &  !is.na(tdata$wait.time)}  
+tdata$wait.time[indx] <- tdata$wait.time[indx] - .5  
+sdata <- tmerge(tdata, tdata, 
+                id=(1:nrow(tdata)),
+                death = event(futime, fustat),
+                trans = tdc(wait.time))  
+jasa.counting <- sdata[,c(7:11, 2:3)] 
+head(jasa.counting)
+
+```
+
+## 8.2.1 Using the Time Transfer Function 
+
+
+
+```{r}
+
+stage.n <- rep(0, nrow(pancreatic2))  
+stage.n[pancreatic2$stage == "M"] <- 1  
+result.panc <- coxph(Surv(pfs) ~ stage.n, data = pancreatic2)  
+result.panc 
+
+
+result.panc2.tt <- coxph(Surv(pfs) ~ stage.n + tt(stage.n),
+                         tt=function(x,t,...) x*log(t), data = pancreatic2)  
+result.panc2.tt  
+
+survminer::ggcoxdiagnostics(result.panc2.tt,type = "schoenfeld")
+```
+
+
+## 8.2.2 Time Dependent Variables That Increase  Linearly with Time 
+
+But we know that the age of a patient increases in lock step with time  itself, so can’t we treat increasing age as a time dependent variable? The answer  is yes, but doing so **has no effect on the model**.
+
+
+```{r}
+
+coxph(Surv(time, status==2) ~ age, data=lung) 
+
+
+coxph(Surv(time, status==2) ~ tt(age), data=lung,
+      tt=function(x, t,...) {  
+        age <- x + t/365.25
+        age
+        }) 
+
+```
+
+## Exercises
+
+### Exercise 8.1.
+
+Encode the log of the partial likelihood in Eq. 8.1.1 into an R function, and  find the maximum using “optim” (as in Sect. 5.2). Verify that the result matches that  from the “coxph” procedure in Sect. 8.1.
+
+```{r eval=F}
+
+data.exercises8 = data.frame(id=seq(6),
+           wait.time=c(12,NA,NA,18,NA,17),
+           futime=c(58,8,37,28,35,77),
+           fustat=rep(1,6),
+           transplant=c(1,0,0,1,0,1))
+
+coxph(Surv(futime, fustat) ~ transplant, data=data.exercises8) 
+
+coxph(Surv(futime, fustat) ~ transplant + tt(wait.time
+),
+      tt=function(x,t,...) x*log(t), data = pancreatic2)  
+
+
+```
+
+
+### Exercise 8.2. 
+
+Consider the following synthetic time dependent data: 
+
+![](Chapters/images/8_3.png)
+
+First model the data ignoring the wait time. Then transform the data into startstop format, then use that form of the data to model “transplant” as a time dependent  covariate. Write out the partial likelihood for these data, and use this partial  likelihood to find the maximum partial likelihood estimate of the coefficient for  transplant. Compare your answer to the results of “coxph”.  
+
+```{r}
+
+
+```
+
+
+### Exercise 8.3
+
+For the pancreatic data, construct a Schoenfeld residual plot and loess smooth  curve for an identity transform, using transform = “identity” in the coxph.zph  function. Then fit a linear time transfer function, as in Sect. 8.2.1, and plot the fitted  line on the residual plot. 
+
+```{r}
+
+
+```
+
+### Exercise 8.4
+
+Again using the pancreatic data, construct the residual plot and plot the transfer  function for g.t/ D log.t  30/. How does the evidence for a treatment effect differ  from the result in Sect. 8.2.1 using g.t/ D log.t  30/? 
+
+```{r}
+
+```
+
+### Exercise 8.5
+
+Using the lung data as in Sect. 8.2.2, compute log(age) and fit a Cox model  using this as a fixed covariate. Then fit log(age) as a time dependent variable, using  the time transfer function. Do the results differ? Why? 
+
+```{r}
+
+```
+
+
+
+
+
+
+
