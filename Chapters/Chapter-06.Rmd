@@ -16,6 +16,8 @@ library(survival)
 library(tidyr)
 library(dplyr)
 library(knitr)
+library(asaur)
+library(survminer)
 ```
 
 ## Model Selection and Interpretation 
@@ -71,11 +73,17 @@ summary(result.cox)
 
 ## 6.3 Hypothesis Testing for Nested Models 
 
+When constructing statistical tests, it is necessary to compare what are  called `“nested” models`. 
+
+That is, when comparing two models, the covariates of one  model must be a subset of the covariates in the other.
+
+
+
 ```{r}
 
+attach(pharmacoSmoking)
 data(pharmacoSmoking)
 
-attach(pharmacoSmoking)
 
 pharmacoSmoking %>% head(25) %>%  kable()
 
@@ -135,11 +143,13 @@ AIC(modelC.coxph) # <- this one
 ### Step AIC
 ```{r}
 
-modelAll.coxph <- coxph(Surv(pharmacoSmoking$ttr, pharmacoSmoking$relapse) ~ pharmacoSmoking$grp + pharmacoSmoking$gender + pharmacoSmoking$race + pharmacoSmoking$employment + pharmacoSmoking$yearsSmoking + pharmacoSmoking$levelSmoking +  pharmacoSmoking$ageGroup4 + pharmacoSmoking$priorAttempts + pharmacoSmoking$longestNoSmoke)  
+modelAll.coxph <- coxph(Surv(ttr, relapse) ~ grp + gender + race + employment + yearsSmoking + levelSmoking +  ageGroup4 + priorAttempts + longestNoSmoke,data=pharmacoSmoking)  
 
-result.step <- step(modelAll.coxph, scope=list(upper=~ pharmacoSmoking$grp +  pharmacoSmoking$gender + pharmacoSmoking$race + pharmacoSmoking$employment + pharmacoSmoking$yearsSmoking +  pharmacoSmoking$levelSmoking + pharmacoSmoking$ageGroup4 + pharmacoSmoking$priorAttempts +  pharmacoSmoking$longestNoSmoke, lower=~pharmacoSmoking$grp))  
+result.step <- step(modelAll.coxph, scope=list(upper=~ grp +  gender + race + employment + yearsSmoking +  levelSmoking + ageGroup4 + priorAttempts +  longestNoSmoke, lower=~grp),data=pharmacoSmoking)  
 
 result.step
+
+ggforest(model = result.step,data = pharmacoSmoking)
 
 ```
 
@@ -149,15 +159,73 @@ result.step
 
 ```{r}
 
-modelS4.coxph <- coxph(Surv(pharmacoSmoking$ttr, pharmacoSmoking$relapse) ~ pharmacoSmoking$grp + pharmacoSmoking$employment +  + pspline(pharmacoSmoking$age, df=4))  
+modelS4.coxph <- coxph(Surv(ttr, relapse) ~ grp + employment +  + pspline(age, df=4),data = pharmacoSmoking)  
 modelS4.coxph 
 
-# termplot(modelS4.coxph, se=T, terms=3, ylabs="Log hazard")
+termplot(modelS4.coxph, se=T, terms=3, ylabs="Log hazard")
 
 
 ```
 
+## Exercises
 
+### 6.1 
+
+> 6.1. The data set “hepatocelluar” is in the “asaur” package. 
+
+It contains 17 clinical  and biomarker measurements on 227 patients, as well as overall survival and  time to recurrence, both recorded in months [42, 43]. There are three measures of CXCL17 activity, CXCL17T (intratumoral), CXCL17P (peritumoral), and  CXCL17N (nontumoral). There is a particular interest in whether they are related to  overall and also recurrence-free survival. 
+
+Which of the three is most strongly related  for each survival outcome? 
+
+For the one most strongly related with survival, fit a  spline model and plot it, as we did in Sect. 6.5. Does this suggest that categorizing  CXCL17 would be appropriate?  
+
+
+```{r}
+
+attach(hepatoCellular)
+data(hepatoCellular)
+
+# hepatoCellular$OS
+# hepatoCellular$Death
+
+# hepatoCellular$RFS
+# hepatoCellular$Recurrence
+
+# hepatoCellular$CXCL17T
+# hepatoCellular$CXCL17P
+# hepatoCellular$CXCL17N
+
+## OS
+
+model.CXCL17T.coxph <- coxph(Surv(OS, Death) ~ CXCL17T,data=hepatoCellular)  
+model.CXCL17T.coxph
+model.CXCL17P.coxph <- coxph(Surv(OS, Death) ~ CXCL17P,data=hepatoCellular)  
+model.CXCL17P.coxph
+model.CXCL17N.coxph <- coxph(Surv(OS, Death) ~ CXCL17N,data=hepatoCellular)  
+model.CXCL17N.coxph
+
+model.CXCL17.coxph <- coxph(Surv(OS, Death) ~ CXCL17T + CXCL17P + CXCL17N ,data=hepatoCellular)  
+model.CXCL17.coxph
+
+model.CXCL17.coxph
+
+termplot(model.CXCL17.coxph, se=T, terms=c(1,2,3), ylabs="Log hazard")
+
+```
+
+
+> 6.2. For the covariates with complete data (in Columns 1–22), 
+
+use stepwise  regression with AIC to identify the best model for (a) overall survival, and  (b) recurrence-free survival. 
+
+```{r}
+
+model.all.coxph = coxph(Surv(OS, Death) ~ .,
+                        data=hepatoCellular[,c(2:15,20:22)])  
+model.all.coxph.step <- step(model.all.coxph,data=hepatoCellular[,c(2:15,20:22)])  
+model.all.coxph.step
+
+```
 
 
 
